@@ -9,7 +9,7 @@ def download_video(url, output_path):
     command = [
         "yt-dlp",
         "--no-playlist",
-        "-f", "best",
+        # "-f", "best", # Removed as per yt-dlp suggestion
         "-o", output_path,
         url
     ]
