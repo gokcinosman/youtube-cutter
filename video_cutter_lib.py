@@ -10,6 +10,7 @@ def download_video(url, output_path):
         "yt-dlp",
         "--no-playlist",
         # "-f", "best", # Removed as per yt-dlp suggestion
+        "--merge-output-format", "mp4",
         "-o", output_path,
         url
     ]
