@@ -243,8 +243,11 @@ class ItemEnterEventListener(EventListener):
                 logger.info("Video cutting complete.")
                 
                 extension.show_notification("Processing Complete", f"Video saved: {final_output_path}")
-                # Optional: Open the saved file
-                # return OpenAction(final_output_path) 
+                
+                # Open the output directory if the preference is set
+                if extension.preferences.get('ytc_auto_open_dir') is True: # Check if True, not just truthy
+                    logger.info(f"Auto-opening output directory: {output_directory}")
+                    return OpenAction(output_directory) # Open the directory, not the file itself
                 
         except subprocess.CalledProcessError as e:
             logger.error(f"Error during processing: {e}")
