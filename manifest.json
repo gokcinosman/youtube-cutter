@@ -15,6 +15,13 @@
       "name": "YT Cutter Keyword Minimal",
       "description": "Keyword to trigger YouTube cutter",
       "default_value": "ytc_min"
+    },
+    {
+      "id": "ytc_output_dir",
+      "type": "text",
+      "name": "Output Directory",
+      "description": "Directory to save cut videos. Use '~' for home directory (e.g., ~/Videos/Cuts).",
+      "default_value": "~/Downloads"
     }
   ]
 }
