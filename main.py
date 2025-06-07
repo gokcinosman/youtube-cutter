@@ -12,7 +12,7 @@ from ulauncher.api.shared.action.HideWindowAction import HideWindowAction
 from ulauncher.api.shared.action.DoNothingAction import DoNothingAction
 from ulauncher.api.shared.action.ExtensionCustomAction import ExtensionCustomAction
 from ulauncher.api.shared.action.OpenAction import OpenAction
-from ulauncher.api.shared.notification import Notification, NotificationType
+from ulauncher.api.shared.action import Notification, NotificationType # Changed this line
 
 # video_cutter_lib'den fonksiyonları import et
 from .video_cutter_lib import download_video, cut_video
