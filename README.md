@@ -42,6 +42,8 @@ To cut a video, use the following format:
 To download an entire video, use the following format:
 `<keyword> <youtube_url> full`
 
+![readme2.png](images/readme2.png)
+
 **Example:**
 `ytc https://www.youtube.com/watch?v=dQw4w9WgXcQ full`
 
