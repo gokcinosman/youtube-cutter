@@ -54,6 +54,69 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+def parse_flexible_time(time_str):
+    """
+    Parses a flexible time string (e.g., "1h2m3s", "10m", "30s")
+    and converts it to HH:MM:SS format.
+    Returns None if parsing fails.
+    """
+    if not time_str:
+        return None
+
+    hours = 0
+    minutes = 0
+    seconds = 0
+
+    # Regex to capture h, m, s components
+    # Allows for optional components and various orderings, but we'll process them sequentially
+    # For simplicity, we'll assume a common pattern like XhYmZs or just YmZs or Zs etc.
+    # A more robust parser might handle any order, but this should cover most cases.
+    
+    h_match = re.search(r"(\d+)h", time_str)
+    if h_match:
+        hours = int(h_match.group(1))
+        time_str = time_str.replace(h_match.group(0), "") # Remove matched part
+
+    m_match = re.search(r"(\d+)m", time_str)
+    if m_match:
+        minutes = int(m_match.group(1))
+        time_str = time_str.replace(m_match.group(0), "")
+
+    s_match = re.search(r"(\d+)s", time_str)
+    if s_match:
+        seconds = int(s_match.group(1))
+        time_str = time_str.replace(s_match.group(0), "")
+
+    # If there's any leftover string that isn't h, m, or s, it's an invalid format
+    if time_str.strip(): # Check if anything remains after removing h, m, s parts
+        # Check if the remainder is just a number, implying seconds if no unit was given
+        if time_str.strip().isdigit() and not (h_match or m_match or s_match): # Only if no other units were found
+             seconds = int(time_str.strip())
+        elif time_str.strip().isdigit() and not s_match: # If only h or m were found, last number is seconds
+            seconds = int(time_str.strip())
+        elif time_str.strip() != "": # If there's non-numeric leftover, it's an error
+            logger.warning(f"Invalid characters in time string: {time_str}")
+            return None
+
+
+    if hours == 0 and minutes == 0 and seconds == 0 and not (h_match or m_match or s_match or time_str.strip().isdigit()):
+        # If input was like "abc" and not numbers or h/m/s units
+        return None
+
+    # Convert to HH:MM:SS
+    # Handle potential overflows from seconds/minutes if user enters e.g. 90s
+    minutes += seconds // 60
+    seconds %= 60
+    hours += minutes // 60
+    minutes %= 60
+
+    if hours > 99: # Arbitrary limit for hours
+        logger.warning(f"Hours exceed 99: {hours}")
+        return None
+
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
 class YouTubeCutterExtension(Extension):
     def __init__(self):
         super(YouTubeCutterExtension, self).__init__()
@@ -86,8 +149,8 @@ class KeywordQueryEventListener(EventListener):
         if not query:
             return RenderResultListAction([
                 ExtensionResultItem(icon='images/icon.png',
-                                    name='Usage: <url> <start> <end>',
-                                    description='Ex: https://youtu.be/xyz 00:01:00 00:02:00',
+                                    name='Usage: <url> <start_time> <end_time>',
+                                    description='Time format: e.g., 1m30s, 2h5m, 45s. Ex: https://youtu.be/xyz 1m30s 2m15s',
                                     on_enter=DoNothingAction())
             ])
 
@@ -96,20 +159,21 @@ class KeywordQueryEventListener(EventListener):
             return RenderResultListAction([
                 ExtensionResultItem(icon='images/icon.png',
                                     name='Invalid Input',
-                                    description='Usage: <url> <start_time> <end_time>',
+                                    description='Usage: <url> <start_time> <end_time>. Time: e.g., 1m30s, 2h, 45s',
                                     highlightable=False,
                                     on_enter=HideWindowAction())
             ])
 
-        video_url, start_time, end_time = parts
+        video_url, start_time_str, end_time_str = parts
 
-        # Validate time format (simple check)
-        time_regex = re.compile(r"^\d{2}:\d{2}:\d{2}(\.\d+)?$")
-        if not time_regex.match(start_time) or not time_regex.match(end_time):
+        start_time = parse_flexible_time(start_time_str)
+        end_time = parse_flexible_time(end_time_str)
+
+        if start_time is None or end_time is None:
             return RenderResultListAction([
                 ExtensionResultItem(icon='images/icon.png',
                                     name='Invalid Time Format',
-                                    description='Time format should be HH:MM:SS or HH:MM:SS.sss',
+                                    description='Use format like 1h2m3s, 10m, 30s, or HH:MM:SS.',
                                     highlightable=False,
                                     on_enter=HideWindowAction())
             ])
