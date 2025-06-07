@@ -1,0 +1,20 @@
+{  "required_api_version": "2",
+  "manifest_version": "2",
+  "api_version": "2",
+  "name": "YouTube Video Kesici",
+  "description": "YouTube videolarini keser (minimal test).",
+  "developer_name": "Gokcin",
+  "developer_url": "",
+  "icon": "images/icon.png",
+  "main_module": "main.py",
+  "version": "1.0.0",
+  "preferences": [
+    {
+      "id": "ytc_keyword_minimal",
+      "type": "keyword",
+      "name": "YT Cutter Keyword Minimal",
+      "description": "Keyword to trigger YouTube cutter",
+      "default_value": "ytc_min"
+    }
+  ]
+}
