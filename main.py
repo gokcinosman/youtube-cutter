@@ -52,26 +52,37 @@ except ImportError:
             result = subprocess.run(command, check=True, capture_output=True, text=True)
             logger.info("Video cutting complete (fallback).")
 
-        def download_full_video(url, output_dir):
+        def download_full_video(url, full_output_path): # Modified for fallback
             """Downloads the full video from the specified URL to the output_dir (fallback)."""
-            logger.info(f"Downloading full video (fallback): {url} -> {output_dir}")
+            logger.info(f"Downloading full video (fallback): {url} -> {full_output_path}")
             # This fallback is simplified and won't return the exact filename like the main one.
             # It also doesn't use --print filename.
             command = [
                 "yt-dlp",
                 "--no-playlist",
                 "--merge-output-format", "mp4",
-                "-P", output_dir,
-                # "-o", "%(title)s.%(ext)s", # Implicit with -P
+                "-o", full_output_path, # Use full path for output
                 url
             ]
             result = subprocess.run(command, check=True, capture_output=True, text=True)
             logger.info("Full video download complete (fallback).")
             # In a real fallback, determining the exact output filename would be complex here.
             # For simplicity, we won't return it, main.py's fallback handling would need to be aware.
-            return None # Fallback cannot easily determine the filename
+            return full_output_path # Assume success and return requested path
 
 logger = logging.getLogger(__name__)
+
+def get_next_available_filename(directory, file_extension="mp4"):
+    """
+    Finds the next available sequential filename (1.ext, 2.ext, etc.) in the given directory.
+    """
+    i = 1
+    while True:
+        filename = f"{i}.{file_extension}"
+        filepath = os.path.join(directory, filename)
+        if not os.path.exists(filepath):
+            return filepath
+        i += 1
 
 def parse_flexible_time(time_str):
     """
@@ -85,16 +96,11 @@ def parse_flexible_time(time_str):
     hours = 0
     minutes = 0
     seconds = 0
-
-    # Regex to capture h, m, s components
-    # Allows for optional components and various orderings, but we'll process them sequentially
-    # For simplicity, we'll assume a common pattern like XhYmZs or just YmZs or Zs etc.
-    # A more robust parser might handle any order, but this should cover most cases.
     
     h_match = re.search(r"(\d+)h", time_str)
     if h_match:
         hours = int(h_match.group(1))
-        time_str = time_str.replace(h_match.group(0), "") # Remove matched part
+        time_str = time_str.replace(h_match.group(0), "") 
 
     m_match = re.search(r"(\d+)m", time_str)
     if m_match:
@@ -106,30 +112,24 @@ def parse_flexible_time(time_str):
         seconds = int(s_match.group(1))
         time_str = time_str.replace(s_match.group(0), "")
 
-    # If there's any leftover string that isn't h, m, or s, it's an invalid format
-    if time_str.strip(): # Check if anything remains after removing h, m, s parts
-        # Check if the remainder is just a number, implying seconds if no unit was given
-        if time_str.strip().isdigit() and not (h_match or m_match or s_match): # Only if no other units were found
+    if time_str.strip(): 
+        if time_str.strip().isdigit() and not (h_match or m_match or s_match): 
              seconds = int(time_str.strip())
-        elif time_str.strip().isdigit() and not s_match: # If only h or m were found, last number is seconds
+        elif time_str.strip().isdigit() and not s_match: 
             seconds = int(time_str.strip())
-        elif time_str.strip() != "": # If there's non-numeric leftover, it's an error
+        elif time_str.strip() != "": 
             logger.warning(f"Invalid characters in time string: {time_str}")
             return None
 
-
     if hours == 0 and minutes == 0 and seconds == 0 and not (h_match or m_match or s_match or time_str.strip().isdigit()):
-        # If input was like "abc" and not numbers or h/m/s units
         return None
 
-    # Convert to HH:MM:SS
-    # Handle potential overflows from seconds/minutes if user enters e.g. 90s
     minutes += seconds // 60
     seconds %= 60
     hours += minutes // 60
     minutes %= 60
 
-    if hours > 99: # Arbitrary limit for hours
+    if hours > 99: 
         logger.warning(f"Hours exceed 99: {hours}")
         return None
 
@@ -140,23 +140,17 @@ class YouTubeCutterExtension(Extension):
     def __init__(self):
         super(YouTubeCutterExtension, self).__init__()
         self.subscribe(KeywordQueryEvent, KeywordQueryEventListener())
-        self.subscribe(ItemEnterEvent, ItemEnterEventListener()) # To handle custom action
+        self.subscribe(ItemEnterEvent, ItemEnterEventListener()) 
 
     def show_notification(self, title, text, notification_type="info"):
-        """
-        Show notification using system notification system
-        Since Ulauncher doesn't have built-in notification API in older versions,
-        we'll use system notifications via subprocess
-        """
         try:
-            # Use notify-send for Linux desktop notifications
             subprocess.run([
                 'notify-send', 
                 '-a', 'YouTube Cutter',
-                '-i', 'video-x-generic',  # Generic video icon
+                '-i', 'video-x-generic', 
                 title, 
                 text
-            ], check=False)  # Don't raise exception if notify-send fails
+            ], check=False) 
         except Exception as e:
             logger.warning(f"Could not show notification: {e}")
 
@@ -179,7 +173,7 @@ class KeywordQueryEventListener(EventListener):
         item_name = ""
         item_description = ""
 
-        if len(parts) == 3: # Cut video: <url> <start_time> <end_time>
+        if len(parts) == 3: 
             video_url, start_time_str, end_time_str = parts
             start_time = parse_flexible_time(start_time_str)
             end_time = parse_flexible_time(end_time_str)
@@ -205,7 +199,7 @@ class KeywordQueryEventListener(EventListener):
             item_name = f"Cut Video: {video_url}"
             item_description = f"Start: {start_time}, End: {end_time}"
 
-        elif len(parts) == 2 and parts[1].lower() == 'full': # Download full video: <url> full
+        elif len(parts) == 2 and parts[1].lower() == 'full': 
             video_url = parts[0]
             if not (video_url.startswith("http://") or video_url.startswith("https://")):
                 return RenderResultListAction([
@@ -218,9 +212,9 @@ class KeywordQueryEventListener(EventListener):
 
             action_data = {'action_type': 'full_download', 'url': video_url}
             item_name = f"Download Full Video: {video_url}"
-            item_description = "Download the entire video using its title as filename."
+            item_description = "Download the entire video. Filename will be sequential (e.g., 1.mp4)."
 
-        else: # Invalid format
+        else: 
             return RenderResultListAction([
                 ExtensionResultItem(icon='images/icon.png',
                                     name='Invalid Input Format',
@@ -251,27 +245,25 @@ class ItemEnterEventListener(EventListener):
                 logger.error(f"Could not create output directory: {output_directory}. Error: {e}")
                 extension.show_notification("Error", f"Could not create output directory: {e}")
                 return HideWindowAction()
+        
+        final_output_path = get_next_available_filename(output_directory, "mp4")
 
         try:
             if action_type == 'cut':
                 start_time = data['start']
                 end_time = data['end']
                 
-                safe_url_part = re.sub(r'[^a-zA-Z0-9]', '_', video_url.split('/')[-1])
-                output_filename = f"cut_{safe_url_part}_{start_time.replace(':', '')}_{end_time.replace(':', '')}.mp4"
-                final_output_path = os.path.join(output_directory, output_filename)
-
                 extension.show_notification("Processing Started", f"Downloading and cutting video: {video_url}")
                 with tempfile.TemporaryDirectory() as tmpdir:
                     temp_video_path = os.path.join(tmpdir, "downloaded_video.mp4")
                     
                     logger.info(f"Temporary video file for cutting: {temp_video_path}")
                     extension.show_notification("Download (for cut)", f"Downloading video: {video_url}...")
-                    download_video(video_url, temp_video_path) # This is the partial download for cutting
+                    download_video(video_url, temp_video_path) 
                     logger.info("Video download for cut complete.")
                     extension.show_notification("Download Successful (for cut)", "Video downloaded.")
 
-                    logger.info(f"Cutting video: {start_time} - {end_time}")
+                    logger.info(f"Cutting video: {start_time} - {end_time} to {final_output_path}")
                     extension.show_notification("Cutting", "Cutting video...")
                     cut_video(temp_video_path, start_time, end_time, final_output_path)
                     logger.info("Video cutting complete.")
@@ -280,24 +272,20 @@ class ItemEnterEventListener(EventListener):
             elif action_type == 'full_download':
                 extension.show_notification("Processing Started", f"Downloading full video: {video_url}")
                 
-                # The download_full_video function saves directly to output_directory and returns the full path
-                downloaded_file_full_path = download_full_video(video_url, output_directory)
+                confirmed_download_path = download_full_video(video_url, final_output_path)
                 
-                if downloaded_file_full_path:
-                    logger.info(f"Full video download complete: {downloaded_file_full_path}")
-                    extension.show_notification("Download Complete", f"Full video saved: {downloaded_file_full_path}")
+                if confirmed_download_path and os.path.exists(confirmed_download_path):
+                    logger.info(f"Full video download complete: {confirmed_download_path}")
+                    extension.show_notification("Download Complete", f"Full video saved: {confirmed_download_path}")
                 else:
-                    # This case might happen if the fallback download_full_video was used and couldn't return filename
-                    logger.warning("Full video downloaded, but exact path not returned by library (possibly fallback).")
-                    extension.show_notification("Download Complete", f"Full video downloaded to {output_directory}. Filename determined by video title.")
-
+                    logger.error(f"Full video download attempted to {final_output_path}, but path confirmation failed or file not found. Confirmed path: {confirmed_download_path}")
+                    extension.show_notification("Download Issue", f"Full video download to {final_output_path} may have failed. Please check the directory.")
 
             else:
                 logger.error(f"Unknown action type: {action_type}")
                 extension.show_notification("Error", "Unknown action requested.")
                 return HideWindowAction()
 
-            # Open the output directory if the preference is set, after either action
             if extension.preferences.get('ytc_auto_open_dir') is True:
                 logger.info(f"Auto-opening output directory: {output_directory}")
                 return OpenAction(output_directory)
@@ -311,7 +299,7 @@ class ItemEnterEventListener(EventListener):
             logger.error(f"An unexpected error occurred: {e}")
             extension.show_notification("Critical Error", f"Unexpected error: {str(e)}")
         
-        return HideWindowAction() # Hide Ulauncher after processing
+        return HideWindowAction() 
 
 if __name__ == '__main__':
     YouTubeCutterExtension().run()

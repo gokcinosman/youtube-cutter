@@ -46,39 +46,32 @@ def cut_video(input_path, start_time, end_time, output_path):
         print(f"STDERR:\n{e.stderr}")
         raise # Propagate the error to main.py
 
-def download_full_video(url, output_dir):
-    """Downloads the full video from the specified URL to the output_dir, using video title as filename."""
-    print(f"▶ video_cutter_lib: Downloading full video: {url} -> {output_dir}")
+def download_full_video(url, full_output_path):
+    """Downloads the full video from the specified URL to the given full_output_path."""
+    print(f"▶ video_cutter_lib: Downloading full video: {url} -> {full_output_path}")
     
-    # yt-dlp will save the file in output_dir with the name derived from the video title.
-    # We use --print filename to get the actual path of the downloaded file.
-    # The -P option sets the output path template, which in this case is just the directory.
-    # yt-dlp will append the filename (like title.ext) to this path.
     command = [
         "yt-dlp",
         "--no-playlist",
         "--merge-output-format", "mp4", # Ensure mp4 format
-        "-P", output_dir, # Set output directory
-        # "-o", "%(title)s.%(ext)s", # Let yt-dlp determine filename from title, already default with -P
-        "--print", "filename", # Print the final resolved filename
+        "-o", full_output_path, # Specify the exact output file path and name
+        "--print", "filename", # Print the final resolved filename (should match full_output_path)
         url
     ]
     try:
         # Raises CalledProcessError on error.
-        # We need to capture stdout to get the filename.
+        # We need to capture stdout to confirm the filename.
         result = subprocess.run(command, check=True, capture_output=True, text=True, encoding='utf-8')
-        downloaded_file_path = result.stdout.strip().splitlines()[-1] # Get the last line of stdout, which should be the filename
+        # The last line of stdout should be the filename yt-dlp used.
+        # It should match full_output_path.
+        confirmed_output_path = result.stdout.strip().splitlines()[-1] 
         
-        # yt-dlp with -P might print the full path directly, or just the filename relative to CWD if -P wasn't effective as expected.
-        # Let's ensure the path is absolute and correct.
-        # If yt-dlp prints an absolute path, great. If it prints a relative one (e.g. if -P was ignored and it saved to CWD)
-        # then os.path.join(output_dir, downloaded_file_path) might be needed.
-        # However, with -P, yt-dlp should handle placing it in output_dir and printing the full path or path relative to output_dir.
-        # The --print filename usually gives the full path when -P is used.
-
         print(f"▶ video_cutter_lib: Full video download command output:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}")
-        print(f"▶ video_cutter_lib: Full video download complete: {downloaded_file_path}")
-        return downloaded_file_path # Return the actual path of the downloaded file
+        if confirmed_output_path != full_output_path:
+            # This case should ideally not happen if yt-dlp respects -o as expected.
+            print(f"⚠️ video_cutter_lib: Confirmed output path '{confirmed_output_path}' differs from requested '{full_output_path}'. Using confirmed path.")
+        print(f"▶ video_cutter_lib: Full video download complete: {confirmed_output_path}")
+        return confirmed_output_path # Return the actual path yt-dlp reported
     except subprocess.CalledProcessError as e:
         print(f"❌ video_cutter_lib: Full video download error: {e}")
         print(f"STDOUT:\n{e.stdout}")
