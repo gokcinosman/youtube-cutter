@@ -1,8 +1,8 @@
 { "required_api_version": "2",
   "manifest_version": "2",
   "api_version": "2",
-  "name": "YouTube Video Kesici",
-  "description": "YouTube videolarini keser (minimal test).",
+  "name": "YouTube Video Cutter",
+  "description": "Cuts or downloads YouTube videos. Allows specifying start/end times or downloading the full video.",
   "developer_name": "Gokcin",
   "developer_url": "",
   "icon": "images/icon.png",
@@ -12,9 +12,9 @@
     {
       "id": "ytc_keyword_minimal",
       "type": "keyword",
-      "name": "YT Cutter Keyword Minimal",
-      "description": "Keyword to trigger YouTube cutter",
-      "default_value": "ytc_min"
+      "name": "YouTube Cutter Keyword",
+      "description": "Keyword to trigger YouTube cutter. Use '<keyword> <url> <start> <end>' to cut or '<keyword> <url> full' to download the full video.",
+      "default_value": "ytc"
     },
     {
       "id": "ytc_output_dir",
