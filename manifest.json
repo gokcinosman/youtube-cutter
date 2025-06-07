@@ -23,12 +23,16 @@
       "description": "Directory to save cut videos. Use '~' for home directory (e.g., ~/Videos/Cuts).",
       "default_value": "~/Downloads"
     },
-    {
-      "id": "ytc_auto_open_dir",
-      "type": "checkbox",
-      "name": "Auto-open Output Directory",
-      "description": "Automatically open the output directory after cutting a video.",
-      "default_value": true
-    }
+   {
+  "id": "ytc_auto_open_dir",
+  "type": "select",
+  "name": "Auto-open Output Directory",
+  "description": "Automatically open the output directory after cutting a video.",
+  "options": [
+    { "value": "true", "text": "Yes" },
+    { "value": "false", "text": "No" }
+  ],
+  "default_value": "true"
+}
   ]
 }
