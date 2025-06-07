@@ -3,7 +3,7 @@ import os
 import tempfile
 import subprocess
 import re
-import time # For throttling progress notifications
+import time 
 from ulauncher.api.client.Extension import Extension
 from ulauncher.api.client.EventListener import EventListener
 from ulauncher.api.shared.event import KeywordQueryEvent, ItemEnterEvent
@@ -14,64 +14,27 @@ from ulauncher.api.shared.action.DoNothingAction import DoNothingAction
 from ulauncher.api.shared.action.ExtensionCustomAction import ExtensionCustomAction
 from ulauncher.api.shared.action.OpenAction import OpenAction
 
-# video_cutter_lib'den fonksiyonları import et
 try:
     from .video_cutter_lib import download_video, cut_video, download_full_video
 except ImportError:
-    # If relative import fails, try absolute import
     try:
         from video_cutter_lib import download_video, cut_video, download_full_video
     except ImportError as e:
+        logger = logging.getLogger(__name__) # Ensure logger is defined before use
         logger.error(f"Could not import video_cutter_lib: {e}")
-        # Define functions here (fallback)
         import subprocess
-        
-        def download_video(url, output_path, progress_callback=None): # Add callback to fallback
-            """Downloads the video from the specified URL."""
+        def download_video(url, output_path, progress_callback=None):
             logger.info(f"Downloading video (fallback): {url} -> {output_path}")
-            command = [
-                "yt-dlp",
-                "--no-playlist",
-                "-f", "best", # Fallback might not have progress parsing
-                "-o", output_path,
-                url
-            ]
-            # Fallback won't have live progress reporting
-            result = subprocess.run(command, check=True, capture_output=True, text=True)
-            logger.info("Video download complete (fallback).")
-            if progress_callback:
-                progress_callback("100%") # Simulate completion
-
+            subprocess.run(["yt-dlp", "--no-playlist", "-f", "best", "-o", output_path, url], check=True)
+            if progress_callback: progress_callback("100%")
         def cut_video(input_path, start_time, end_time, output_path):
-            """Cuts the video in the specified time range."""
             logger.info(f"Cutting video (fallback): {input_path} [{start_time}-{end_time}] -> {output_path}")
-            command = [
-                "ffmpeg",
-                "-ss", start_time,
-                "-to", end_time,
-                "-i", input_path,
-                "-c", "copy",
-                output_path
-            ]
-            result = subprocess.run(command, check=True, capture_output=True, text=True)
-            logger.info("Video cutting complete (fallback).")
-
-        def download_full_video(url, full_output_path, progress_callback=None): # Add callback to fallback
-            """Downloads the full video from the specified URL to the output_dir (fallback)."""
+            subprocess.run(["ffmpeg", "-ss", start_time, "-to", end_time, "-i", input_path, "-c", "copy", output_path], check=True)
+        def download_full_video(url, full_output_path, progress_callback=None):
             logger.info(f"Downloading full video (fallback): {url} -> {full_output_path}")
-            command = [
-                "yt-dlp",
-                "--no-playlist",
-                "--merge-output-format", "mp4",
-                "-o", full_output_path, 
-                url
-            ]
-            # Fallback won't have live progress reporting
-            result = subprocess.run(command, check=True, capture_output=True, text=True)
-            logger.info("Full video download complete (fallback).")
-            if progress_callback:
-                progress_callback("100%") # Simulate completion
-            return full_output_path 
+            subprocess.run(["yt-dlp", "--no-playlist", "--merge-output-format", "mp4", "-o", full_output_path, url], check=True)
+            if progress_callback: progress_callback("100%")
+            return full_output_path
 
 logger = logging.getLogger(__name__)
 
@@ -80,8 +43,7 @@ def get_next_available_filename(directory, file_extension="mp4"):
     while True:
         filename = f"{i}.{file_extension}"
         filepath = os.path.join(directory, filename)
-        if not os.path.exists(filepath):
-            return filepath
+        if not os.path.exists(filepath): return filepath
         i += 1
 
 def parse_flexible_time(time_str):
@@ -137,30 +99,45 @@ class KeywordQueryEventListener(EventListener):
 class ItemEnterEventListener(EventListener):
     def __init__(self):
         super(ItemEnterEventListener, self).__init__()
-        self.last_notified_percentage = -1
-        self.min_percentage_change_for_notification = 5 # Notify every 5%
+        self.last_notification_time = 0
+        self.last_reported_percentage_str = "" # Store the string to avoid re-notifying same string
 
     def _progress_callback(self, extension, percentage_str, operation_name="Download"):
         try:
-            # Extract numeric part of percentage for comparison
-            current_percentage_val = float(re.sub(r'[^\d\.]', '', percentage_str))
-            
-            is_final = "100" in percentage_str # Check if it's a 100% mark
+            notify_interval_str = extension.preferences.get('ytc_progress_notify_interval', "5")
+            try:
+                notify_interval = int(notify_interval_str)
+            except ValueError:
+                logger.warning(f"Invalid progress notification interval: '{notify_interval_str}'. Defaulting to 5 seconds.")
+                notify_interval = 5
 
-            if is_final or abs(current_percentage_val - self.last_notified_percentage) >= self.min_percentage_change_for_notification:
+            current_time = time.time()
+            is_final = "100" in percentage_str # A bit simplistic, but good for final update
+
+            # Avoid sending the exact same percentage string repeatedly if yt-dlp sends it multiple times
+            if percentage_str == self.last_reported_percentage_str and not is_final:
+                return
+
+            if is_final or notify_interval == 0 or (current_time - self.last_notification_time >= notify_interval) :
                 extension.show_notification(f"{operation_name} Progress", f"{percentage_str.strip()}")
-                self.last_notified_percentage = current_percentage_val
+                self.last_notification_time = current_time
+                self.last_reported_percentage_str = percentage_str
             
             if is_final: # Reset for next operation
-                self.last_notified_percentage = -1
+                self.last_notification_time = 0
+                self.last_reported_percentage_str = ""
 
-        except ValueError: # If parsing percentage_str to float fails
-            extension.show_notification(f"{operation_name} Progress", f"{percentage_str.strip()}") # Show it anyway
-            self.last_notified_percentage = -1 # Reset on error or non-standard progress string
+
+        except Exception as e: # Catch any error within callback to prevent crashing the main thread
+            logger.error(f"Error in progress_callback: {e}", exc_info=True)
+            # Show it anyway if an error occurs, but don't update time to allow next one sooner
+            extension.show_notification(f"{operation_name} Progress", f"{percentage_str.strip()} (callback error)")
 
 
     def on_event(self, event, extension):
-        self.last_notified_percentage = -1 # Reset for each new operation
+        self.last_notification_time = 0 # Reset for each new operation
+        self.last_reported_percentage_str = ""
+
         data = event.get_data()
         action_type = data.get('action_type')
         video_url = data['url']
@@ -192,7 +169,7 @@ class ItemEnterEventListener(EventListener):
                                    lambda p: self._progress_callback(extension, p, "Download (for cut)")) 
                     
                     logger.info("Video download for cut complete.")
-                    extension.show_notification("Download Successful (for cut)", "Video downloaded.")
+                    # Notification for "Download Successful" is now handled by 100% progress or final callback state
 
                     logger.info(f"Cutting video: {start_time} - {end_time} to {final_output_path}")
                     extension.show_notification("Cutting", "Cutting video...")
@@ -206,9 +183,10 @@ class ItemEnterEventListener(EventListener):
                 confirmed_download_path = download_full_video(video_url, final_output_path,
                                                               lambda p: self._progress_callback(extension, p, "Full Download"))
                 
+                # Notification for "Download Complete" is now handled by 100% progress or final callback state
                 if confirmed_download_path and os.path.exists(confirmed_download_path):
                     logger.info(f"Full video download complete: {confirmed_download_path}")
-                    extension.show_notification("Download Complete", f"Full video saved: {confirmed_download_path}")
+                    # No separate "Download Complete" notification here if 100% progress already sent it
                 else:
                     logger.error(f"Full video download attempted to {final_output_path}, but path confirmation failed or file not found. Confirmed path: {confirmed_download_path}")
                     extension.show_notification("Download Issue", f"Full video download to {final_output_path} may have failed. Please check the directory.")
@@ -218,15 +196,18 @@ class ItemEnterEventListener(EventListener):
                 extension.show_notification("Error", "Unknown action requested.")
                 return HideWindowAction()
 
-            if extension.preferences.get('ytc_auto_open_dir') is True:
+            auto_open_pref = extension.preferences.get('ytc_auto_open_dir', "true")
+            if auto_open_pref == "true": # Compare with string "true"
                 logger.info(f"Auto-opening output directory: {output_directory}")
                 return OpenAction(output_directory)
                 
         except subprocess.CalledProcessError as e:
             logger.error(f"Error during processing: {e}")
-            logger.error(f"Command: {' '.join(e.cmd if e.cmd else ['Unknown command'])}") # e.cmd can be None
-            logger.error(f"Stderr: {e.stderr}")
-            extension.show_notification("Error", f"An error occurred: {e.stderr[:200] if e.stderr else str(e)}...")
+            cmd_str = ' '.join(e.cmd if isinstance(e.cmd, list) else [str(e.cmd)])
+            stderr_str = e.stderr[:200] if e.stderr else str(e)
+            logger.error(f"Command: {cmd_str}")
+            logger.error(f"Stderr: {stderr_str}")
+            extension.show_notification("Error", f"An error occurred: {stderr_str}...")
         except Exception as e:
             logger.error(f"An unexpected error occurred: {e}", exc_info=True)
             extension.show_notification("Critical Error", f"Unexpected error: {str(e)}")

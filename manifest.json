@@ -33,6 +33,13 @@
     { "value": "false", "text": "No" }
   ],
   "default_value": "true"
-}
+},
+    {
+      "id": "ytc_progress_notify_interval",
+      "type": "text",
+      "name": "Progress Notification Interval (seconds)",
+      "description": "How often to show download progress notifications. E.g., 5 for every 5 seconds. Use 0 to show all distinct progress updates from yt-dlp.",
+      "default_value": "5"
+    }
   ]
 }
