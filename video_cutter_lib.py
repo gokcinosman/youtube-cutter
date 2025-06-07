@@ -11,23 +11,25 @@ def _process_yt_dlp_output(process, progress_callback, action_name):
             if not line:
                 continue
             all_stdout_lines.append(line)
-            print(f"▶ video_cutter_lib ({action_name}): STDOUT line: {line}") # Log all lines for debugging
+            # print(f"▶ video_cutter_lib ({action_name}): STDOUT line: {line}") # Verbose logging
             
             if progress_callback:
-                # Try to match our specific progress template
-                match = re.search(r"YTC_PROGRESS:([\s\d\.]+%)", line)
+                # Try to match a line that is primarily a percentage, possibly with whitespace
+                # This assumes the --progress-template is outputting just the percentage string.
+                # Example: "  10.5%"
+                match = re.fullmatch(r"\s*([\d\.]+\s*%)\s*", line) # Match full line as percentage
                 if match:
                     percentage = match.group(1).strip()
                     progress_callback(percentage)
-                else:
-                    # Fallback for default yt-dlp progress format if template fails
+                # Keep the old fallback just in case, though it might be less likely to hit with the new template
+                elif "[download]" in line: # Check if it's a standard yt-dlp download line
                     match_default = re.search(r"\[download\]\s+([\d\.]+%)", line)
                     if match_default:
                         percentage = match_default.group(1).strip()
                         progress_callback(percentage)
         process.stdout.close()
     
-    process.wait() # Wait for the process to complete
+    process.wait() 
     return process.returncode, all_stdout_lines
 
 def download_video(url, output_path, progress_callback=None):
@@ -36,25 +38,23 @@ def download_video(url, output_path, progress_callback=None):
     command = [
         "yt-dlp",
         "--no-playlist",
-        "--progress", # Enable progress output
-        "--progress-template", "YTC_PROGRESS:%(progress._percent_str)s", # Custom template
+        "--progress", 
+        "--newline", # Force progress on new lines
+        "--progress-template", "%(progress._percent_str)s", # Simplest percentage template
         "--merge-output-format", "mp4",
         "-o", output_path,
         url
     ]
     try:
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=False) # text=False for byte stream
-        
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=False)
         return_code, stdout_lines = _process_yt_dlp_output(process, progress_callback, "cut_download")
         
-        # Capture stderr after process completion
         stderr_output = ""
         if process.stderr:
             stderr_output = process.stderr.read().decode('utf-8', errors='replace')
             process.stderr.close()
             if stderr_output.strip():
                  print(f"▶ video_cutter_lib (cut_download): STDERR:\n{stderr_output}")
-
 
         if return_code != 0:
             raise subprocess.CalledProcessError(return_code, command, output="\n".join(stdout_lines), stderr=stderr_output)
@@ -74,7 +74,7 @@ def cut_video(input_path, start_time, end_time, output_path):
     print(f"▶ video_cutter_lib: Cutting video: {input_path} [{start_time}-{end_time}] -> {output_path}")
     command = [
         "ffmpeg",
-        "-y", # Overwrite output files without asking
+        "-y", 
         "-ss", start_time,
         "-to", end_time,
         "-i", input_path,
@@ -101,16 +101,16 @@ def download_full_video(url, full_output_path, progress_callback=None):
     command = [
         "yt-dlp",
         "--no-playlist",
-        "--progress", # Enable progress output
-        "--progress-template", "YTC_PROGRESS:%(progress._percent_str)s", # Custom template
+        "--progress",
+        "--newline", # Force progress on new lines
+        "--progress-template", "%(progress._percent_str)s", # Simplest percentage template
         "--merge-output-format", "mp4", 
         "-o", full_output_path, 
-        "--print", "filename", # Still print filename for confirmation
+        "--print", "filename", 
         url
     ]
     try:
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=False)
-        
         return_code, stdout_lines = _process_yt_dlp_output(process, progress_callback, "full_download")
 
         stderr_output = ""
@@ -124,30 +124,19 @@ def download_full_video(url, full_output_path, progress_callback=None):
             raise subprocess.CalledProcessError(return_code, command, output="\n".join(stdout_lines), stderr=stderr_output)
 
         confirmed_output_path = None
-        if stdout_lines:
-            # The filename printed by --print filename should be among the last lines
-            for line in reversed(stdout_lines):
-                if line.strip() and os.path.exists(line.strip()): # Check if it's a valid path
-                    confirmed_output_path = line.strip()
-                    break
-            if not confirmed_output_path: # Fallback if parsing fails, use the intended path
-                 confirmed_output_path = full_output_path
-
-
-        if confirmed_output_path != full_output_path and os.path.exists(full_output_path):
-             # If yt-dlp saved to the requested path but printed something else (e.g. relative path)
-             # and the requested path exists, prefer the requested path.
-             confirmed_output_path = full_output_path
-        elif confirmed_output_path != full_output_path:
-            print(f"⚠️ video_cutter_lib: Confirmed output path '{confirmed_output_path}' differs from requested '{full_output_path}'. Using confirmed path if it exists, otherwise requested.")
-            if not os.path.exists(confirmed_output_path): # If the printed path doesn't exist, but original does
-                if os.path.exists(full_output_path):
-                    confirmed_output_path = full_output_path
-                else: # Neither exists, something went wrong
-                     print(f"❌ video_cutter_lib: Neither confirmed path '{confirmed_output_path}' nor requested path '{full_output_path}' found.")
-                     # Fallback to requested path for return, error likely already raised or will be
-                     confirmed_output_path = full_output_path
-
+        # Try to find the filename from --print filename, which might be mixed with progress lines
+        # It's often one of the last non-empty lines that is also a valid file path.
+        for line in reversed(stdout_lines):
+            potential_path = line.strip()
+            if potential_path and os.path.exists(potential_path) and potential_path.endswith(".mp4"): # Basic check
+                confirmed_output_path = potential_path
+                break
+        
+        if not confirmed_output_path: # If not found, assume it's the requested path
+            confirmed_output_path = full_output_path
+            if not os.path.exists(confirmed_output_path): # If still not found, then there's an issue
+                 print(f"❌ video_cutter_lib: Output file {full_output_path} not found after download.")
+                 # No specific error to raise here if yt-dlp exited 0, main.py will handle file check.
 
         print(f"▶ video_cutter_lib: Full video download complete. Target: {full_output_path}, Confirmed/Actual: {confirmed_output_path}")
         return confirmed_output_path 
