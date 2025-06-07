@@ -12,7 +12,6 @@ from ulauncher.api.shared.action.HideWindowAction import HideWindowAction
 from ulauncher.api.shared.action.DoNothingAction import DoNothingAction
 from ulauncher.api.shared.action.ExtensionCustomAction import ExtensionCustomAction
 from ulauncher.api.shared.action.OpenAction import OpenAction
-from ulauncher.api.shared.action import Notification, NotificationType # Changed this line
 
 # video_cutter_lib'den fonksiyonları import et
 from .video_cutter_lib import download_video, cut_video
@@ -25,8 +24,23 @@ class YouTubeCutterExtension(Extension):
         self.subscribe(KeywordQueryEvent, KeywordQueryEventListener())
         self.subscribe(ItemEnterEvent, ItemEnterEventListener()) # Özel eylemi işlemek için
 
-    def show_notification(self, title, text, notification_type=NotificationType.INFO):
-        Notification(title, text, type=notification_type).notify()
+    def show_notification(self, title, text, notification_type="info"):
+        """
+        Show notification using system notification system
+        Since Ulauncher doesn't have built-in notification API in older versions,
+        we'll use system notifications via subprocess
+        """
+        try:
+            # Use notify-send for Linux desktop notifications
+            subprocess.run([
+                'notify-send', 
+                '-a', 'YouTube Cutter',
+                '-i', 'video-x-generic',  # Generic video icon
+                title, 
+                text
+            ], check=False)  # Don't raise exception if notify-send fails
+        except Exception as e:
+            logger.warning(f"Could not show notification: {e}")
 
 class KeywordQueryEventListener(EventListener):
     def on_event(self, event, extension):
@@ -74,7 +88,6 @@ class KeywordQueryEventListener(EventListener):
                                     on_enter=HideWindowAction())
             ])
 
-
         action_data = {
             'url': video_url,
             'start': start_time,
@@ -102,7 +115,7 @@ class ItemEnterEventListener(EventListener):
                 logger.info(f"Çıktı dizini oluşturuldu: {output_directory}")
             except OSError as e:
                 logger.error(f"Çıktı dizini oluşturulamadı: {output_directory}. Hata: {e}")
-                extension.show_notification("Hata", f"Çıktı dizini oluşturulamadı: {e}", NotificationType.ERROR)
+                extension.show_notification("Hata", f"Çıktı dizini oluşturulamadı: {e}")
                 return HideWindowAction()
 
         # Basit bir çıktı dosya adı oluşturma (daha sonra geliştirilebilir)
@@ -112,24 +125,24 @@ class ItemEnterEventListener(EventListener):
         output_filename = f"cut_{safe_url_part}_{start_time.replace(':', '')}_{end_time.replace(':', '')}.mp4"
         final_output_path = os.path.join(output_directory, output_filename)
 
-        extension.show_notification("İşlem Başladı", f"Video indiriliyor ve kesiliyor: {video_url}", NotificationType.INFO)
+        extension.show_notification("İşlem Başladı", f"Video indiriliyor ve kesiliyor: {video_url}")
 
         try:
             with tempfile.TemporaryDirectory() as tmpdir:
                 temp_video_path = os.path.join(tmpdir, "downloaded_video.mp4")
                 
                 logger.info(f"Geçici video dosyası: {temp_video_path}")
-                extension.show_notification("İndirme", f"Video indiriliyor: {video_url}...", NotificationType.INFO)
+                extension.show_notification("İndirme", f"Video indiriliyor: {video_url}...")
                 download_video(video_url, temp_video_path)
                 logger.info("Video indirme tamamlandı.")
-                extension.show_notification("İndirme Başarılı", "Video başarıyla indirildi.", NotificationType.INFO)
+                extension.show_notification("İndirme Başarılı", "Video başarıyla indirildi.")
 
                 logger.info(f"Video kesiliyor: {start_time} - {end_time}")
-                extension.show_notification("Kesme", "Video kesiliyor...", NotificationType.INFO)
+                extension.show_notification("Kesme", "Video kesiliyor...")
                 cut_video(temp_video_path, start_time, end_time, final_output_path)
                 logger.info("Video kesme tamamlandı.")
                 
-                extension.show_notification("İşlem Tamamlandı", f"Video kaydedildi: {final_output_path}", NotificationType.SUCCESS)
+                extension.show_notification("İşlem Tamamlandı", f"Video kaydedildi: {final_output_path}")
                 # İsteğe bağlı: Kaydedilen dosyayı aç
                 # return OpenAction(final_output_path) 
                 
@@ -137,10 +150,10 @@ class ItemEnterEventListener(EventListener):
             logger.error(f"İşlem sırasında hata: {e}")
             logger.error(f"Komut: {' '.join(e.cmd)}")
             logger.error(f"Stderr: {e.stderr}")
-            extension.show_notification("Hata", f"İşlem sırasında bir hata oluştu: {e.stderr[:200]}...", NotificationType.ERROR)
+            extension.show_notification("Hata", f"İşlem sırasında bir hata oluştu: {e.stderr[:200]}...")
         except Exception as e:
             logger.error(f"Beklenmedik bir hata oluştu: {e}")
-            extension.show_notification("Kritik Hata", f"Beklenmedik bir hata: {str(e)}", NotificationType.ERROR)
+            extension.show_notification("Kritik Hata", f"Beklenmedik bir hata: {str(e)}")
         
         return HideWindowAction() # İşlem bittikten sonra Ulauncher'ı gizle
 
