@@ -14,7 +14,43 @@ from ulauncher.api.shared.action.ExtensionCustomAction import ExtensionCustomAct
 from ulauncher.api.shared.action.OpenAction import OpenAction
 
 # video_cutter_lib'den fonksiyonları import et
-from .video_cutter_lib import download_video, cut_video
+try:
+    from .video_cutter_lib import download_video, cut_video
+except ImportError:
+    # Eğer relative import çalışmazsa, absolute import dene
+    try:
+        from video_cutter_lib import download_video, cut_video
+    except ImportError as e:
+        logger.error(f"video_cutter_lib import edilemedi: {e}")
+        # Fonksiyonları burada tanımla (fallback)
+        import subprocess
+        
+        def download_video(url, output_path):
+            """Videoyu belirtilen URL'den indirir."""
+            logger.info(f"Videoyu indiriyor: {url} -> {output_path}")
+            command = [
+                "yt-dlp",
+                "--no-playlist",
+                "-f", "best",
+                "-o", output_path,
+                url
+            ]
+            result = subprocess.run(command, check=True, capture_output=True, text=True)
+            logger.info("Video indirme tamamlandı.")
+
+        def cut_video(input_path, start_time, end_time, output_path):
+            """Videoyu belirtilen zaman aralığında keser."""
+            logger.info(f"Videoyu kesiyor: {input_path} [{start_time}-{end_time}] -> {output_path}")
+            command = [
+                "ffmpeg",
+                "-ss", start_time,
+                "-to", end_time,
+                "-i", input_path,
+                "-c", "copy",
+                output_path
+            ]
+            result = subprocess.run(command, check=True, capture_output=True, text=True)
+            logger.info("Video kesme tamamlandı.")
 
 logger = logging.getLogger(__name__)
 
