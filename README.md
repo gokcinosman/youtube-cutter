@@ -35,6 +35,8 @@ To cut a video, use the following format:
 **Example:**
 `ytc https://www.youtube.com/watch?v=dQw4w9WgXcQ 0m5s 0m15s`
 
+![readme.png](images/readme.png)
+
 ### Downloading a Full Video
 
 To download an entire video, use the following format:
