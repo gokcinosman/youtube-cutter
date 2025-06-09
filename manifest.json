@@ -12,8 +12,8 @@
     {
       "id": "ytc_keyword_minimal",
       "type": "keyword",
-      "name": "YouTube Cutter Keyword",
-      "description": "Keyword to trigger YouTube cutter. Use '<keyword> <url> <start> <end>' to cut or '<keyword> <url> full' to download the full video.",
+      "name": "YouTube Video Cutter Keyword",
+      "description": "Keyword to trigger YouTube Video cutter. Use '<keyword> <url> <start> <end>' to cut or '<keyword> <url> full' to download the full video.",
       "default_value": "ytc"
     },
     {

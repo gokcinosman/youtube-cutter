@@ -64,15 +64,15 @@ def parse_flexible_time(time_str):
     if hours > 99: logger.warning(f"Hours > 99: {hours}"); return None
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
-class YouTubeCutterExtension(Extension):
+class YouTubeVideoCutterExtension(Extension):
     def __init__(self):
-        super(YouTubeCutterExtension, self).__init__()
+        super(YouTubeVideoCutterExtension, self).__init__()
         self.subscribe(KeywordQueryEvent, KeywordQueryEventListener())
         self.subscribe(ItemEnterEvent, ItemEnterEventListener()) 
 
     def show_notification(self, title, text, notification_type="info"):
         try:
-            subprocess.run(['notify-send', '-a', 'YouTube Cutter', '-i', 'video-x-generic', title, text], check=False) 
+            subprocess.run(['notify-send', '-a', 'YouTube Video Cutter', '-i', 'video-x-generic', title, text], check=False) 
         except Exception as e:
             logger.warning(f"Could not show notification: {e}")
 
@@ -215,4 +215,4 @@ class ItemEnterEventListener(EventListener):
         return HideWindowAction() 
 
 if __name__ == '__main__':
-    YouTubeCutterExtension().run()
+    YouTubeVideoCutterExtension().run()
